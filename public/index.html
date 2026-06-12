@@ -1,1 +1,874 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ArrDash</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:       #0D1117;
+    --panel:    #161B22;
+    --panel2:   #1C2330;
+    --border:   #21282F;
+    --teal:     #00D4AA;
+    --teal-dim: rgba(0,212,170,0.12);
+    --amber:    #F0A500;
+    --red:      #E05252;
+    --green:    #3FB950;
+    --radarr:   #E6B84A;
+    --sonarr:   #5BB8D4;
+    --text:     #C9D1D9;
+    --muted:    #6E7681;
+    --mono:     'JetBrains Mono', monospace;
+    --sans:     'Inter', sans-serif;
+  }
+  body { background:var(--bg); color:var(--text); font-family:var(--sans); font-size:13px; height:100vh; display:flex; flex-direction:column; overflow:hidden; }
 
+  /* PULSE BAR */
+  #pulse-bar { background:var(--panel); border-bottom:1px solid var(--border); height:44px; display:flex; align-items:center; flex-shrink:0; overflow:hidden; }
+  .pulse-label { font-family:var(--mono); font-size:10px; color:var(--teal); letter-spacing:0.08em; text-transform:uppercase; padding:0 16px; white-space:nowrap; border-right:1px solid var(--border); height:100%; display:flex; align-items:center; gap:8px; }
+  .pulse-dot { width:6px; height:6px; border-radius:50%; background:var(--teal); animation:blink 1.4s ease-in-out infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+  .pulse-canvas-wrap { flex:1; height:100%; position:relative; overflow:hidden; }
+  #pulse-canvas { position:absolute; left:0; top:0; width:100%; height:100%; }
+  .pulse-stats { display:flex; border-left:1px solid var(--border); height:100%; }
+  .pulse-stat { padding:0 18px; display:flex; flex-direction:column; justify-content:center; border-right:1px solid var(--border); }
+  .pulse-stat .val { font-family:var(--mono); font-size:13px; font-weight:600; color:var(--text); line-height:1; }
+  .pulse-stat .lbl { font-family:var(--mono); font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; margin-top:3px; }
+
+  /* LAYOUT */
+  #layout { display:flex; flex:1; overflow:hidden; }
+
+  /* SIDEBAR */
+  #sidebar { width:56px; background:var(--panel); border-right:1px solid var(--border); display:flex; flex-direction:column; align-items:center; padding:16px 0; gap:4px; flex-shrink:0; }
+  .logo { font-family:var(--mono); font-size:11px; font-weight:600; color:var(--teal); letter-spacing:0.05em; writing-mode:vertical-rl; text-orientation:mixed; transform:rotate(180deg); margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--border); width:100%; text-align:center; }
+  .nav-item { width:40px; height:40px; border-radius:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; color:var(--muted); transition:background 0.15s, color 0.15s; position:relative; }
+  .nav-item:hover { background:var(--panel2); color:var(--text); }
+  .nav-item.active { background:var(--teal-dim); color:var(--teal); }
+  .nav-item .badge { position:absolute; top:4px; right:4px; width:14px; height:14px; border-radius:50%; background:var(--amber); color:#000; font-size:8px; font-weight:700; display:flex; align-items:center; justify-content:center; font-family:var(--mono); }
+  .nav-spacer { flex:1; }
+  .tooltip { position:relative; }
+  .tooltip::after { content:attr(data-tip); position:absolute; left:52px; top:50%; transform:translateY(-50%); background:#000; color:var(--text); font-family:var(--mono); font-size:10px; letter-spacing:0.06em; text-transform:uppercase; padding:4px 8px; white-space:nowrap; border:1px solid var(--border); pointer-events:none; opacity:0; transition:opacity 0.15s; z-index:100; }
+  .tooltip:hover::after { opacity:1; }
+
+  /* MAIN */
+  #main { flex:1; overflow-y:auto; padding:20px; display:flex; flex-direction:column; gap:20px; }
+  #main::-webkit-scrollbar { width:4px; }
+  #main::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+  /* VIEWS */
+  .view { display:none; flex-direction:column; gap:20px; }
+  .view.active { display:flex; }
+
+  /* SECTION HEADER */
+  .section-head { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .section-head .eyebrow { font-family:var(--mono); font-size:10px; color:var(--teal); text-transform:uppercase; letter-spacing:0.1em; }
+  .section-head .rule { flex:1; height:1px; background:var(--border); }
+  .section-head .count { font-family:var(--mono); font-size:10px; color:var(--muted); }
+
+  /* STATUS CARDS */
+  .status-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; }
+  .stat-grid-3 { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; }
+  .stat-grid-2 { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; }
+  .status-card { background:var(--panel); border:1px solid var(--border); padding:14px 16px; display:flex; flex-direction:column; gap:10px; position:relative; overflow:hidden; }
+  .status-card::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; }
+  .status-card.ok::before    { background:var(--teal); }
+  .status-card.warn::before  { background:var(--amber); }
+  .status-card.error::before { background:var(--red); }
+  .status-card.radarr::before { background:var(--radarr); }
+  .status-card.sonarr::before { background:var(--sonarr); }
+  .sc-head { display:flex; align-items:center; justify-content:space-between; }
+  .sc-name { font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted); }
+  .sc-status { font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:0.06em; padding:2px 7px; text-transform:uppercase; }
+  .ok   .sc-status { color:var(--teal);  background:rgba(0,212,170,0.1); }
+  .warn .sc-status { color:var(--amber); background:rgba(240,165,0,0.1); }
+  .error .sc-status { color:var(--red);  background:rgba(224,82,82,0.1); }
+  .radarr .sc-status { color:var(--radarr); background:rgba(230,184,74,0.1); }
+  .sonarr .sc-status { color:var(--sonarr); background:rgba(91,184,212,0.1); }
+  .sc-value { font-family:var(--mono); font-size:28px; font-weight:600; color:var(--text); line-height:1; }
+  .sc-sub { font-size:11px; color:var(--muted); margin-top:2px; }
+
+  /* GRID LAYOUTS */
+  .two-col   { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  .three-col { display:grid; grid-template-columns:2fr 1fr; gap:20px; }
+  .full-col  { display:grid; grid-template-columns:1fr; gap:20px; }
+
+  /* PANEL */
+  .panel { background:var(--panel); border:1px solid var(--border); }
+  .panel-head { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; border-bottom:1px solid var(--border); }
+  .panel-title { font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:var(--muted); }
+  .panel-action { font-family:var(--mono); font-size:9px; color:var(--teal); cursor:pointer; letter-spacing:0.06em; text-transform:uppercase; background:none; border:none; }
+  .panel-tabs { display:flex; gap:0; }
+  .panel-tab { font-family:var(--mono); font-size:9px; color:var(--muted); cursor:pointer; letter-spacing:0.06em; text-transform:uppercase; background:none; border:none; padding:0 12px; border-left:1px solid var(--border); }
+  .panel-tab.active { color:var(--teal); }
+
+  /* TABLE */
+  .data-table { width:100%; border-collapse:collapse; }
+  .data-table th { font-family:var(--mono); font-size:9px; text-transform:uppercase; letter-spacing:0.08em; color:var(--muted); font-weight:500; text-align:left; padding:8px 16px; border-bottom:1px solid var(--border); }
+  .data-table td { padding:9px 16px; font-family:var(--mono); font-size:11px; color:var(--text); border-bottom:1px solid rgba(33,40,47,0.6); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:0; }
+  .data-table tr:last-child td { border-bottom:none; }
+  .data-table tr:hover td { background:rgba(255,255,255,0.02); }
+
+  /* PROGRESS */
+  .progress-wrap { width:80px; height:3px; background:var(--border); overflow:hidden; }
+  .progress-fill { height:100%; background:var(--teal); transition:width 0.3s; }
+  .progress-fill.slow { background:var(--amber); }
+  .progress-fill.radarr-c { background:var(--radarr); }
+  .progress-fill.sonarr-c { background:var(--sonarr); }
+
+  /* PILLS */
+  .pill { display:inline-block; font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; padding:2px 6px; }
+  .pill.movie    { color:var(--radarr); background:rgba(230,184,74,0.1); }
+  .pill.series   { color:var(--sonarr); background:rgba(91,184,212,0.1); }
+  .pill.dl       { color:var(--teal);   background:var(--teal-dim); }
+  .pill.seed     { color:var(--green);  background:rgba(63,185,80,0.1); }
+  .pill.pause    { color:var(--muted);  background:rgba(110,118,129,0.1); }
+  .pill.pend     { color:var(--amber);  background:rgba(240,165,0,0.1); }
+  .pill.approved { color:var(--green);  background:rgba(63,185,80,0.1); }
+  .pill.miss     { color:var(--red);    background:rgba(224,82,82,0.1); }
+  .pill.avail    { color:var(--teal);   background:var(--teal-dim); }
+  .pill.cutoff   { color:var(--amber);  background:rgba(240,165,0,0.1); }
+
+  /* BUTTONS */
+  .btn { font-family:var(--mono); font-size:9px; font-weight:600; letter-spacing:0.06em; text-transform:uppercase; padding:4px 10px; border:1px solid; cursor:pointer; background:none; transition:all 0.15s; }
+  .btn-approve { color:var(--teal); border-color:var(--teal); }
+  .btn-approve:hover { background:var(--teal-dim); }
+  .btn-deny { color:var(--muted); border-color:var(--border); }
+  .btn-deny:hover { color:var(--red); border-color:var(--red); }
+  .btn-primary { color:#000; background:var(--teal); border-color:var(--teal); }
+  .btn-primary:hover { opacity:0.85; }
+  .btn-ghost { color:var(--muted); border-color:var(--border); }
+  .btn-ghost:hover { color:var(--text); border-color:var(--muted); }
+
+  /* REQUEST ITEMS */
+  .request-list { display:flex; flex-direction:column; }
+  .request-item { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid rgba(33,40,47,0.6); transition:background 0.1s; }
+  .request-item:last-child { border-bottom:none; }
+  .request-item:hover { background:rgba(255,255,255,0.02); }
+  .req-poster { width:28px; height:42px; background:var(--panel2); border:1px solid var(--border); flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:16px; }
+  .req-info { flex:1; min-width:0; }
+  .req-title { font-size:12px; font-weight:500; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .req-meta { font-family:var(--mono); font-size:10px; color:var(--muted); margin-top:2px; }
+  .req-actions { display:flex; gap:6px; flex-shrink:0; }
+
+  /* INDEXER */
+  .indexer-list { display:flex; flex-direction:column; }
+  .indexer-item { display:flex; align-items:center; gap:12px; padding:10px 16px; border-bottom:1px solid rgba(33,40,47,0.6); }
+  .indexer-item:last-child { border-bottom:none; }
+  .idx-indicator { width:6px; height:6px; border-radius:50%; flex-shrink:0; }
+  .idx-indicator.ok    { background:var(--green); box-shadow:0 0 6px var(--green); }
+  .idx-indicator.warn  { background:var(--amber); box-shadow:0 0 6px var(--amber); }
+  .idx-indicator.error { background:var(--red);   box-shadow:0 0 6px var(--red); }
+  .idx-name { font-family:var(--mono); font-size:11px; color:var(--text); flex:1; }
+  .idx-stat { font-family:var(--mono); font-size:10px; color:var(--muted); text-align:right; }
+  .idx-stat .num { color:var(--text); }
+
+  /* SPEED ROW */
+  .speed-row { display:flex; align-items:center; gap:8px; padding:8px 16px; border-bottom:1px solid var(--border); background:rgba(0,0,0,0.15); }
+  .speed-row .lbl { font-family:var(--mono); font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; }
+  .speed-row .val { font-family:var(--mono); font-size:11px; color:var(--teal); font-weight:600; margin-left:auto; }
+
+  /* TORRENT ROWS (Deluge full view) */
+  .torrent-actions { display:flex; gap:4px; }
+  .icon-btn { background:none; border:1px solid var(--border); color:var(--muted); cursor:pointer; padding:3px 6px; font-size:11px; transition:all 0.15s; }
+  .icon-btn:hover { color:var(--text); border-color:var(--muted); }
+  .icon-btn.danger:hover { color:var(--red); border-color:var(--red); }
+
+  /* SONARR CALENDAR */
+  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; padding:16px; }
+  .cal-day { background:var(--panel2); border:1px solid var(--border); padding:8px; min-height:72px; position:relative; }
+  .cal-day.today { border-color:var(--teal); }
+  .cal-day-num { font-family:var(--mono); font-size:9px; color:var(--muted); margin-bottom:4px; }
+  .cal-day.today .cal-day-num { color:var(--teal); }
+  .cal-event { font-family:var(--mono); font-size:9px; padding:2px 4px; margin-bottom:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cal-event.aired    { background:rgba(63,185,80,0.15); color:var(--green); }
+  .cal-event.upcoming { background:rgba(91,184,212,0.15); color:var(--sonarr); }
+  .cal-event.missing  { background:rgba(224,82,82,0.15); color:var(--red); }
+  .cal-head { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; padding:8px 16px 0; }
+  .cal-head-day { font-family:var(--mono); font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:0.08em; text-align:center; }
+
+  /* PROWLARR CHART BARS */
+  .bar-chart { display:flex; flex-direction:column; gap:8px; padding:16px; }
+  .bar-row { display:flex; align-items:center; gap:10px; }
+  .bar-label { font-family:var(--mono); font-size:10px; color:var(--text); width:110px; flex-shrink:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .bar-track { flex:1; height:6px; background:var(--border); }
+  .bar-fill { height:100%; background:var(--teal); transition:width 0.6s; }
+  .bar-val { font-family:var(--mono); font-size:10px; color:var(--muted); width:40px; text-align:right; flex-shrink:0; }
+
+  /* SETTINGS FORM */
+  .settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .setting-group { background:var(--panel); border:1px solid var(--border); padding:20px; display:flex; flex-direction:column; gap:14px; }
+  .setting-group-title { font-family:var(--mono); font-size:10px; text-transform:uppercase; letter-spacing:0.1em; color:var(--teal); padding-bottom:10px; border-bottom:1px solid var(--border); }
+  .setting-row { display:flex; flex-direction:column; gap:5px; }
+  .setting-label { font-family:var(--mono); font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; }
+  .setting-input { background:var(--panel2); border:1px solid var(--border); color:var(--text); font-family:var(--mono); font-size:11px; padding:7px 10px; outline:none; width:100%; }
+  .setting-input:focus { border-color:var(--teal); }
+  .setting-row-inline { display:flex; align-items:center; justify-content:space-between; }
+  .toggle { width:32px; height:18px; background:var(--border); border-radius:9px; position:relative; cursor:pointer; transition:background 0.2s; flex-shrink:0; }
+  .toggle.on { background:var(--teal); }
+  .toggle::after { content:''; position:absolute; width:12px; height:12px; background:#fff; border-radius:50%; top:3px; left:3px; transition:left 0.2s; }
+  .toggle.on::after { left:17px; }
+
+  /* FOOTER */
+  #footer { height:28px; background:var(--panel); border-top:1px solid var(--border); display:flex; align-items:center; padding:0 16px 0 72px; gap:24px; flex-shrink:0; }
+  .footer-item { font-family:var(--mono); font-size:9px; color:var(--muted); text-transform:uppercase; letter-spacing:0.06em; display:flex; align-items:center; gap:6px; }
+  .footer-item .dot { width:5px; height:5px; border-radius:50%; }
+  .footer-item .dot.ok   { background:var(--green); }
+  .footer-item .dot.warn { background:var(--amber); }
+  .footer-spacer { flex:1; }
+  .footer-time { font-family:var(--mono); font-size:9px; color:var(--muted); letter-spacing:0.06em; }
+
+  /* PAGE TITLE */
+  .page-title { font-family:var(--mono); font-size:11px; font-weight:600; color:var(--text); text-transform:uppercase; letter-spacing:0.1em; display:flex; align-items:center; gap:10px; }
+  .page-title .accent { color:var(--teal); }
+  .page-subtitle { font-family:var(--mono); font-size:10px; color:var(--muted); margin-top:2px; }
+  .page-header { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:4px; }
+  .page-header-actions { display:flex; gap:8px; }
+
+  /* SEARCH BAR */
+  .search-bar { background:var(--panel2); border:1px solid var(--border); display:flex; align-items:center; gap:8px; padding:0 12px; }
+  .search-bar input { background:none; border:none; color:var(--text); font-family:var(--mono); font-size:11px; padding:8px 0; outline:none; flex:1; }
+  .search-bar input::placeholder { color:var(--muted); }
+  .search-icon { color:var(--muted); font-size:12px; }
+
+  /* MEDIA CARD GRID */
+  .media-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:10px; padding:16px; }
+  .media-card { background:var(--panel2); border:1px solid var(--border); display:flex; flex-direction:column; cursor:pointer; transition:border-color 0.15s; }
+  .media-card:hover { border-color:var(--teal); }
+  .media-card-art { height:90px; display:flex; align-items:center; justify-content:center; font-size:32px; background:linear-gradient(135deg,var(--panel2),var(--bg)); border-bottom:1px solid var(--border); }
+  .media-card-info { padding:8px; }
+  .media-card-title { font-size:11px; font-weight:500; color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .media-card-meta { font-family:var(--mono); font-size:9px; color:var(--muted); margin-top:3px; }
+  .media-card-status { margin-top:6px; }
+
+  /* ACTIVITY FEED */
+  .activity-feed { display:flex; flex-direction:column; }
+  .activity-item { display:flex; align-items:flex-start; gap:12px; padding:10px 16px; border-bottom:1px solid rgba(33,40,47,0.6); }
+  .activity-item:last-child { border-bottom:none; }
+  .activity-icon { width:28px; height:28px; border-radius:4px; display:flex; align-items:center; justify-content:center; font-size:13px; flex-shrink:0; margin-top:1px; }
+  .activity-icon.dl    { background:var(--teal-dim); }
+  .activity-icon.req   { background:rgba(240,165,0,0.12); }
+  .activity-icon.added { background:rgba(63,185,80,0.12); }
+  .activity-icon.err   { background:rgba(224,82,82,0.12); }
+  .activity-text { flex:1; min-width:0; }
+  .activity-main { font-size:12px; color:var(--text); }
+  .activity-main strong { font-weight:500; }
+  .activity-time { font-family:var(--mono); font-size:10px; color:var(--muted); margin-top:2px; }
+</style>
+</head>
+<body>
+
+<!-- PULSE BAR -->
+<div id="pulse-bar">
+  <div class="pulse-label"><div class="pulse-dot"></div>ARRDASH</div>
+  <div class="pulse-canvas-wrap"><canvas id="pulse-canvas"></canvas></div>
+  <div class="pulse-stats">
+    <div class="pulse-stat"><div class="val" id="dl-speed">4.2 MB/s</div><div class="lbl">Download</div></div>
+    <div class="pulse-stat"><div class="val" id="ul-speed">0.8 MB/s</div><div class="lbl">Upload</div></div>
+    <div class="pulse-stat"><div class="val">3</div><div class="lbl">Requests</div></div>
+    <div class="pulse-stat"><div class="val">7/8</div><div class="lbl">Indexers</div></div>
+  </div>
+</div>
+
+<div id="layout">
+  <!-- SIDEBAR -->
+  <nav id="sidebar">
+    <div class="logo">ARR</div>
+    <div class="nav-item active tooltip" data-tab="overview" data-tip="Overview">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+    </div>
+    <div class="nav-item tooltip" data-tab="overseerr" data-tip="Overseerr" style="position:relative">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+      <div class="badge">3</div>
+    </div>
+    <div class="nav-item tooltip" data-tab="radarr" data-tip="Radarr">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="1"/></svg>
+    </div>
+    <div class="nav-item tooltip" data-tab="sonarr" data-tip="Sonarr">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2" y="7" width="20" height="15" rx="1"/><path d="M16 3H8"/><path d="M12 3v4"/></svg>
+    </div>
+    <div class="nav-item tooltip" data-tab="deluge" data-tip="Deluge">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+    </div>
+    <div class="nav-item tooltip" data-tab="prowlarr" data-tip="Prowlarr">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+    </div>
+    <div class="nav-spacer"></div>
+    <div class="nav-item tooltip" data-tab="settings" data-tip="Settings">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+    </div>
+  </nav>
+
+  <main id="main">
+
+    <!-- ══════════════════════════════════════
+         VIEW: OVERVIEW
+    ══════════════════════════════════════ -->
+    <div class="view active" id="view-overview">
+      <div>
+        <div class="section-head"><span class="eyebrow">Service Health</span><div class="rule"></div><span class="count">5 SERVICES</span></div>
+        <div class="status-grid">
+          <div class="status-card ok" id="ov-overseerr">
+            <div class="sc-head"><span class="sc-name">Overseerr</span><span class="sc-status">Online</span></div>
+            <div><div class="sc-value">3</div><div class="sc-sub">pending requests</div></div>
+          </div>
+          <div class="status-card ok" id="ov-radarr">
+            <div class="sc-head"><span class="sc-name">Radarr</span><span class="sc-status">Online</span></div>
+            <div><div class="sc-value">847</div><div class="sc-sub">movies in library</div></div>
+          </div>
+          <div class="status-card ok" id="ov-sonarr">
+            <div class="sc-head"><span class="sc-name">Sonarr</span><span class="sc-status">Online</span></div>
+            <div><div class="sc-value">214</div><div class="sc-sub">series tracked</div></div>
+          </div>
+          <div class="status-card warn" id="ov-prowlarr">
+            <div class="sc-head"><span class="sc-name">Prowlarr</span><span class="sc-status">Degraded</span></div>
+            <div><div class="sc-value">7<span style="font-size:16px;color:var(--muted)">/8</span></div><div class="sc-sub">indexers healthy</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Deluge — Active Transfers</span><button class="panel-action">Add Torrent</button></div>
+          <div class="speed-row">
+            <span class="lbl">↓</span>
+            <div class="progress-wrap" style="flex:1;width:auto"><div class="progress-fill" style="width:70%"></div></div>
+            <span class="val">4.2 MB/s</span>
+            <span class="lbl" style="margin-left:16px">↑</span>
+            <div class="progress-wrap" style="flex:1;width:auto"><div class="progress-fill" style="width:15%;background:var(--muted)"></div></div>
+            <span class="val" style="color:var(--muted)">0.8 MB/s</span>
+          </div>
+          <table class="data-table">
+            <thead><tr><th style="width:36%">Name</th><th>Type</th><th>Progress</th><th>Speed</th><th>ETA</th><th>State</th></tr></thead>
+            <tbody>
+              <tr><td style="max-width:140px">Dune Part Two (2024)</td><td><span class="pill movie">Movie</span></td><td><div class="progress-wrap"><div class="progress-fill" style="width:82%"></div></div></td><td style="color:var(--teal)">3.1 MB/s</td><td>4m</td><td><span class="pill dl">DL</span></td></tr>
+              <tr><td style="max-width:140px">Fallout S01E05</td><td><span class="pill series">Series</span></td><td><div class="progress-wrap"><div class="progress-fill" style="width:47%"></div></div></td><td style="color:var(--teal)">1.1 MB/s</td><td>12m</td><td><span class="pill dl">DL</span></td></tr>
+              <tr><td style="max-width:140px">The Boys S04E07</td><td><span class="pill series">Series</span></td><td><div class="progress-wrap"><div class="progress-fill" style="width:100%"></div></div></td><td style="color:var(--muted)">—</td><td>—</td><td><span class="pill seed">Seed</span></td></tr>
+              <tr><td style="max-width:140px">Civil War (2024)</td><td><span class="pill movie">Movie</span></td><td><div class="progress-wrap"><div class="progress-fill slow" style="width:23%"></div></div></td><td style="color:var(--amber)">0.2 MB/s</td><td>1h 14m</td><td><span class="pill dl">DL</span></td></tr>
+              <tr><td style="max-width:140px">Shogun S01E01-E10</td><td><span class="pill series">Series</span></td><td><div class="progress-wrap"><div class="progress-fill" style="width:0%"></div></div></td><td style="color:var(--muted)">—</td><td>—</td><td><span class="pill pause">Paused</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Overseerr — Pending Requests</span><button class="panel-action">View All</button></div>
+          <div class="request-list">
+            <div class="request-item"><div class="req-poster">🎬</div><div class="req-info"><div class="req-title">Kingdom of the Planet of the Apes</div><div class="req-meta">Movie · sarah · 2h ago</div></div><div class="req-actions"><button class="btn btn-approve">Approve</button><button class="btn btn-deny">Deny</button></div></div>
+            <div class="request-item"><div class="req-poster">📺</div><div class="req-info"><div class="req-title">House of the Dragon S02</div><div class="req-meta">Series · mike · 5h ago</div></div><div class="req-actions"><button class="btn btn-approve">Approve</button><button class="btn btn-deny">Deny</button></div></div>
+            <div class="request-item"><div class="req-poster">🎬</div><div class="req-info"><div class="req-title">Furiosa: A Mad Max Saga</div><div class="req-meta">Movie · tom · 1d ago</div></div><div class="req-actions"><button class="btn btn-approve">Approve</button><button class="btn btn-deny">Deny</button></div></div>
+            <div style="padding:10px 16px;">
+              <div style="font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;">Recently Approved</div>
+              <div style="display:flex;flex-direction:column;gap:6px;">
+                <div style="display:flex;align-items:center;gap:10px;"><span class="pill approved">Approved</span><span style="font-size:11px;color:var(--text)">Alien: Romulus</span><span style="font-family:var(--mono);font-size:10px;color:var(--muted);margin-left:auto">Available</span></div>
+                <div style="display:flex;align-items:center;gap:10px;"><span class="pill approved">Approved</span><span style="font-size:11px;color:var(--text)">Fallout S01</span><span style="font-family:var(--mono);font-size:10px;color:var(--teal);margin-left:auto">Downloading</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="three-col">
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Radarr & Sonarr — Queue</span><button class="panel-action">Search Missing</button></div>
+          <table class="data-table">
+            <thead><tr><th style="width:40%">Title</th><th>App</th><th>Quality</th><th>Size</th><th>Status</th></tr></thead>
+            <tbody>
+              <tr><td style="max-width:160px">Dune Part Two</td><td style="color:var(--radarr);font-family:var(--mono);font-size:10px">RADARR</td><td style="font-family:var(--mono);font-size:10px">2160p</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">58.2 GB</td><td><span class="pill dl">Importing</span></td></tr>
+              <tr><td style="max-width:160px">Fallout S01E05</td><td style="color:var(--sonarr);font-family:var(--mono);font-size:10px">SONARR</td><td style="font-family:var(--mono);font-size:10px">1080p</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">4.8 GB</td><td><span class="pill dl">DL</span></td></tr>
+              <tr><td style="max-width:160px">Civil War</td><td style="color:var(--radarr);font-family:var(--mono);font-size:10px">RADARR</td><td style="font-family:var(--mono);font-size:10px">1080p</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">12.1 GB</td><td><span class="pill pend">Slow</span></td></tr>
+              <tr><td style="max-width:160px">House of Dragon S02E01</td><td style="color:var(--sonarr);font-family:var(--mono);font-size:10px">SONARR</td><td style="font-family:var(--mono);font-size:10px">2160p</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">18.7 GB</td><td><span class="pill pend">Queued</span></td></tr>
+              <tr><td style="max-width:160px">Furiosa</td><td style="color:var(--radarr);font-family:var(--mono);font-size:10px">RADARR</td><td style="font-family:var(--mono);font-size:10px">2160p</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">72.4 GB</td><td><span class="pill pend">Searching</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Prowlarr — Indexers</span><button class="panel-action">Test All</button></div>
+          <div class="indexer-list">
+            <div class="indexer-item"><div class="idx-indicator ok"></div><div class="idx-name">1337x</div><div class="idx-stat"><span class="num">142</span> grabs</div></div>
+            <div class="indexer-item"><div class="idx-indicator ok"></div><div class="idx-name">RARBG Mirror</div><div class="idx-stat"><span class="num">89</span> grabs</div></div>
+            <div class="indexer-item"><div class="idx-indicator ok"></div><div class="idx-name">YTS</div><div class="idx-stat"><span class="num">74</span> grabs</div></div>
+            <div class="indexer-item"><div class="idx-indicator ok"></div><div class="idx-name">EZTV</div><div class="idx-stat"><span class="num">51</span> grabs</div></div>
+            <div class="indexer-item"><div class="idx-indicator ok"></div><div class="idx-name">Nyaa.si</div><div class="idx-stat"><span class="num">38</span> grabs</div></div>
+            <div class="indexer-item"><div class="idx-indicator ok"></div><div class="idx-name">TorrentGalaxy</div><div class="idx-stat"><span class="num">27</span> grabs</div></div>
+            <div class="indexer-item"><div class="idx-indicator warn"></div><div class="idx-name" style="color:var(--amber)">TPB Mirror</div><div class="idx-stat" style="color:var(--amber)">Timeout</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         VIEW: OVERSEERR
+    ══════════════════════════════════════ -->
+    <div class="view" id="view-overseerr">
+      <div class="page-header">
+        <div><div class="page-title"><span class="accent">//</span> Overseerr</div><div class="page-subtitle">Manage requests from your users</div></div>
+        <div class="page-header-actions">
+          <div class="search-bar" style="width:220px"><span class="search-icon">⌕</span><input type="text" placeholder="Search requests..."></div>
+        </div>
+      </div>
+      <div class="stat-grid-3">
+        <div class="status-card ok"><div class="sc-head"><span class="sc-name">Pending</span><span class="sc-status">Action Needed</span></div><div><div class="sc-value" id="os-pending-count">3</div><div class="sc-sub">awaiting approval</div></div></div>
+        <div class="status-card ok"><div class="sc-head"><span class="sc-name">Processing</span><span class="sc-status">Active</span></div><div><div class="sc-value" id="os-processing-count">2</div><div class="sc-sub">downloading now</div></div></div>
+        <div class="status-card ok"><div class="sc-head"><span class="sc-name">Available</span><span class="sc-status">This Month</span></div><div><div class="sc-value" id="os-available-count">14</div><div class="sc-sub">fulfilled requests</div></div></div>
+      </div>
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Pending Approval</span><span style="font-family:var(--mono);font-size:9px;color:var(--amber)">3 WAITING</span></div>
+          <div class="request-list" id="os-pending-list">
+            <div class="request-item"><div class="req-poster">🎬</div><div class="req-info"><div class="req-title">Kingdom of the Planet of the Apes</div><div class="req-meta">Movie · 2024 · Requested by sarah · 2h ago</div></div><div class="req-actions"><button class="btn btn-approve">Approve</button><button class="btn btn-deny">Deny</button></div></div>
+            <div class="request-item"><div class="req-poster">📺</div><div class="req-info"><div class="req-title">House of the Dragon S02</div><div class="req-meta">Series · 2024 · Requested by mike · 5h ago</div></div><div class="req-actions"><button class="btn btn-approve">Approve</button><button class="btn btn-deny">Deny</button></div></div>
+            <div class="request-item"><div class="req-poster">🎬</div><div class="req-info"><div class="req-title">Furiosa: A Mad Max Saga</div><div class="req-meta">Movie · 2024 · Requested by tom · 1d ago</div></div><div class="req-actions"><button class="btn btn-approve">Approve</button><button class="btn btn-deny">Deny</button></div></div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Recent Activity</span></div>
+          <div class="activity-feed">
+            <div class="activity-item"><div class="activity-icon dl">⬇</div><div class="activity-text"><div class="activity-main"><strong>Fallout S01</strong> — now downloading</div><div class="activity-time">12 min ago · approved by you</div></div></div>
+            <div class="activity-item"><div class="activity-icon added">✓</div><div class="activity-text"><div class="activity-main"><strong>Alien: Romulus</strong> — available on Plex</div><div class="activity-time">3h ago · imported successfully</div></div></div>
+            <div class="activity-item"><div class="activity-icon req">◷</div><div class="activity-text"><div class="activity-main"><strong>The Boys S04E07</strong> — seeding, available</div><div class="activity-time">6h ago</div></div></div>
+            <div class="activity-item"><div class="activity-icon added">✓</div><div class="activity-text"><div class="activity-main"><strong>Dune Part Two</strong> — importing now</div><div class="activity-time">8h ago · 82% complete</div></div></div>
+            <div class="activity-item"><div class="activity-icon err">✕</div><div class="activity-text"><div class="activity-main"><strong>Oppenheimer 4K</strong> — no release found</div><div class="activity-time">1d ago · search failed</div></div></div>
+            <div class="activity-item"><div class="activity-icon req">◷</div><div class="activity-text"><div class="activity-main"><strong>Shogun S01</strong> — paused by user</div><div class="activity-time">2d ago</div></div></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">All Requests</span>
+          <div style="display:flex;gap:8px">
+            <button class="panel-tab active">All</button>
+            <button class="panel-tab">Movies</button>
+            <button class="panel-tab">Series</button>
+            <button class="panel-tab">Available</button>
+          </div>
+        </div>
+        <table class="data-table">
+          <thead><tr><th style="width:30%">Title</th><th>Type</th><th>Requested By</th><th>Date</th><th>Status</th><th>Actions</th></tr></thead>
+          <tbody id="os-all-body">
+            <tr><td>Kingdom of the Planet of the Apes</td><td><span class="pill movie">Movie</span></td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">sarah</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">2h ago</td><td><span class="pill pend">Pending</span></td><td><div style="display:flex;gap:4px"><button class="btn btn-approve" style="padding:3px 8px">✓</button><button class="btn btn-deny" style="padding:3px 8px">✕</button></div></td></tr>
+            <tr><td>House of the Dragon S02</td><td><span class="pill series">Series</span></td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">mike</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">5h ago</td><td><span class="pill pend">Pending</span></td><td><div style="display:flex;gap:4px"><button class="btn btn-approve" style="padding:3px 8px">✓</button><button class="btn btn-deny" style="padding:3px 8px">✕</button></div></td></tr>
+            <tr><td>Furiosa: A Mad Max Saga</td><td><span class="pill movie">Movie</span></td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">tom</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">1d ago</td><td><span class="pill pend">Pending</span></td><td><div style="display:flex;gap:4px"><button class="btn btn-approve" style="padding:3px 8px">✓</button><button class="btn btn-deny" style="padding:3px 8px">✕</button></div></td></tr>
+            <tr><td>Fallout S01</td><td><span class="pill series">Series</span></td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">sarah</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">2d ago</td><td><span class="pill dl">Downloading</span></td><td><span style="font-family:var(--mono);font-size:10px;color:var(--muted)">—</span></td></tr>
+            <tr><td>Alien: Romulus</td><td><span class="pill movie">Movie</span></td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">mike</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">5d ago</td><td><span class="pill avail">Available</span></td><td><span style="font-family:var(--mono);font-size:10px;color:var(--muted)">—</span></td></tr>
+            <tr><td>The Boys S04E07</td><td><span class="pill series">Series</span></td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">tom</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">1w ago</td><td><span class="pill avail">Available</span></td><td><span style="font-family:var(--mono);font-size:10px;color:var(--muted)">—</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         VIEW: RADARR
+    ══════════════════════════════════════ -->
+    <div class="view" id="view-radarr">
+      <div class="page-header">
+        <div><div class="page-title"><span style="color:var(--radarr)">//</span> Radarr</div><div class="page-subtitle">Movie library & download management</div></div>
+        <div class="page-header-actions">
+          <div class="search-bar" style="width:220px"><span class="search-icon">⌕</span><input type="text" placeholder="Search movies..." id="rd-search-input"></div>
+          <button class="btn btn-primary">+ Add Movie</button>
+        </div>
+      </div>
+      <div class="stat-grid-3">
+        <div class="status-card radarr"><div class="sc-head"><span class="sc-name">Library</span><span class="sc-status">Radarr</span></div><div><div class="sc-value" id="rd-movie-count">847</div><div class="sc-sub">movies total</div></div></div>
+        <div class="status-card ok"><div class="sc-head"><span class="sc-name">Missing</span><span class="sc-status">Monitored</span></div><div><div class="sc-value" id="rd-missing-count">12</div><div class="sc-sub">not yet found</div></div></div>
+        <div class="status-card ok"><div class="sc-head"><span class="sc-name">Queue</span><span class="sc-status">Active</span></div><div><div class="sc-value" id="rd-queue-count">3</div><div class="sc-sub">downloading now</div></div></div>
+      </div>
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Download Queue</span><button class="panel-action">Search All Missing</button></div>
+          <table class="data-table">
+            <thead><tr><th style="width:40%">Movie</th><th>Quality</th><th>Size</th><th>Progress</th><th>Status</th></tr></thead>
+            <tbody id="rd-queue-body">
+              <tr><td>Dune Part Two</td><td style="font-family:var(--mono);font-size:10px">2160p HDR</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">58.2 GB</td><td><div class="progress-wrap"><div class="progress-fill radarr-c" style="width:82%"></div></div></td><td><span class="pill dl">Importing</span></td></tr>
+              <tr><td>Civil War</td><td style="font-family:var(--mono);font-size:10px">1080p</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">12.1 GB</td><td><div class="progress-wrap"><div class="progress-fill slow" style="width:23%"></div></div></td><td><span class="pill pend">Slow</span></td></tr>
+              <tr><td>Furiosa</td><td style="font-family:var(--mono);font-size:10px">2160p HDR</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">72.4 GB</td><td><div class="progress-wrap"><div class="progress-fill radarr-c" style="width:0%"></div></div></td><td><span class="pill pend">Searching</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Missing / Wanted</span><button class="panel-action">Search All</button></div>
+          <table class="data-table">
+            <thead><tr><th style="width:55%">Movie</th><th>Year</th><th>Status</th></tr></thead>
+            <tbody id="rd-wanted-body">
+              <tr><td>Oppenheimer</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">2023</td><td><span class="pill miss">Missing</span></td></tr>
+              <tr><td>Poor Things</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">2023</td><td><span class="pill miss">Missing</span></td></tr>
+              <tr><td>Past Lives</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">2023</td><td><span class="pill miss">Missing</span></td></tr>
+              <tr><td>Monkey Man</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">2024</td><td><span class="pill miss">Missing</span></td></tr>
+              <tr><td>Longlegs</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">2024</td><td><span class="pill miss">Missing</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">Recently Added</span>
+          <div style="display:flex;gap:8px">
+            <button class="panel-tab active">All</button>
+            <button class="panel-tab">4K</button>
+            <button class="panel-tab">1080p</button>
+          </div>
+        </div>
+        <div class="media-grid" id="rd-media-grid">
+          <div class="media-card"><div class="media-card-art">🎬</div><div class="media-card-info"><div class="media-card-title">Alien: Romulus</div><div class="media-card-meta">2024 · 1080p</div><div class="media-card-status"><span class="pill avail">Available</span></div></div></div>
+          <div class="media-card"><div class="media-card-art">🎬</div><div class="media-card-info"><div class="media-card-title">Godzilla x Kong</div><div class="media-card-meta">2024 · 2160p</div><div class="media-card-status"><span class="pill avail">Available</span></div></div></div>
+          <div class="media-card"><div class="media-card-art">🎬</div><div class="media-card-info"><div class="media-card-title">Deadpool & Wolverine</div><div class="media-card-meta">2024 · 2160p</div><div class="media-card-status"><span class="pill avail">Available</span></div></div></div>
+          <div class="media-card"><div class="media-card-art">🎬</div><div class="media-card-info"><div class="media-card-title">Inside Out 2</div><div class="media-card-meta">2024 · 1080p</div><div class="media-card-status"><span class="pill avail">Available</span></div></div></div>
+          <div class="media-card"><div class="media-card-art">🎬</div><div class="media-card-info"><div class="media-card-title">The Fall Guy</div><div class="media-card-meta">2024 · 1080p</div><div class="media-card-status"><span class="pill avail">Available</span></div></div></div>
+          <div class="media-card"><div class="media-card-art">🎬</div><div class="media-card-info"><div class="media-card-title">Challengers</div><div class="media-card-meta">2024 · 1080p</div><div class="media-card-status"><span class="pill avail">Available</span></div></div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         VIEW: SONARR
+    ══════════════════════════════════════ -->
+    <div class="view" id="view-sonarr">
+      <div class="page-header">
+        <div><div class="page-title"><span style="color:var(--sonarr)">//</span> Sonarr</div><div class="page-subtitle">Series tracking & episode management</div></div>
+        <div class="page-header-actions">
+          <div class="search-bar" style="width:220px"><span class="search-icon">⌕</span><input type="text" placeholder="Search series..." id="sn-search-input"></div>
+          <button class="btn btn-primary">+ Add Series</button>
+        </div>
+      </div>
+      <div class="stat-grid-3">
+        <div class="status-card sonarr"><div class="sc-head"><span class="sc-name">Series</span><span class="sc-status">Sonarr</span></div><div><div class="sc-value" id="sn-series-count">214</div><div class="sc-sub">tracked series</div></div></div>
+        <div class="status-card warn"><div class="sc-head"><span class="sc-name">Missing</span><span class="sc-status">Monitored</span></div><div><div class="sc-value" id="sn-missing-count">37</div><div class="sc-sub">episodes not found</div></div></div>
+        <div class="status-card ok"><div class="sc-head"><span class="sc-name">Queue</span><span class="sc-status">Active</span></div><div><div class="sc-value" id="sn-queue-count">2</div><div class="sc-sub">episodes downloading</div></div></div>
+      </div>
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Active Downloads</span></div>
+          <table class="data-table">
+            <thead id="sn-queue-head"><tr><th style="width:40%">Episode</th><th>Quality</th><th>Size</th><th>Progress</th><th>ETA</th></tr></thead>
+            <tbody id="sn-queue-body">
+              <tr><td>Fallout S01E05</td><td style="font-family:var(--mono);font-size:10px">1080p</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">4.8 GB</td><td><div class="progress-wrap"><div class="progress-fill sonarr-c" style="width:47%"></div></div></td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">12m</td></tr>
+              <tr><td>House of Dragon S02E01</td><td style="font-family:var(--mono);font-size:10px">2160p</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">18.7 GB</td><td><div class="progress-wrap"><div class="progress-fill sonarr-c" style="width:8%"></div></div></td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">1h 8m</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Cutoff Unmet</span><button class="panel-action">Upgrade All</button></div>
+          <table class="data-table">
+            <thead><tr><th style="width:55%">Series</th><th>Have</th><th>Want</th></tr></thead>
+            <tbody id="sn-cutoff-body">
+              <tr><td>Breaking Bad</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">720p</td><td style="font-family:var(--mono);font-size:10px"><span class="pill cutoff">1080p</span></td></tr>
+              <tr><td>Chernobyl</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">1080p</td><td style="font-family:var(--mono);font-size:10px"><span class="pill cutoff">2160p</span></td></tr>
+              <tr><td>The Wire</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">480p</td><td style="font-family:var(--mono);font-size:10px"><span class="pill cutoff">1080p</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">Upcoming Episodes — June 2026</span></div>
+        <div class="cal-head">
+          <div class="cal-head-day">Mon</div><div class="cal-head-day">Tue</div><div class="cal-head-day">Wed</div><div class="cal-head-day">Thu</div><div class="cal-head-day">Fri</div><div class="cal-head-day">Sat</div><div class="cal-head-day">Sun</div>
+        </div>
+        <div class="cal-grid" id="sn-cal-grid">
+          <div class="cal-day"><div class="cal-day-num">9</div><div class="cal-event aired">HotD S02E01</div></div>
+          <div class="cal-day"><div class="cal-day-num">10</div><div class="cal-event aired">Fallout E05</div></div>
+          <div class="cal-day"><div class="cal-day-num">11</div></div>
+          <div class="cal-day"><div class="cal-day-num">12</div><div class="cal-event aired">The Boys E07</div></div>
+          <div class="cal-day today"><div class="cal-day-num">13</div><div class="cal-event upcoming">Shogun E08</div></div>
+          <div class="cal-day"><div class="cal-day-num">14</div></div>
+          <div class="cal-day"><div class="cal-day-num">15</div><div class="cal-event upcoming">HotD S02E02</div></div>
+          <div class="cal-day"><div class="cal-day-num">16</div></div>
+          <div class="cal-day"><div class="cal-day-num">17</div><div class="cal-event upcoming">Fallout E06</div></div>
+          <div class="cal-day"><div class="cal-day-num">18</div></div>
+          <div class="cal-day"><div class="cal-day-num">19</div><div class="cal-event upcoming">The Boys E08</div></div>
+          <div class="cal-day"><div class="cal-day-num">20</div></div>
+          <div class="cal-day"><div class="cal-day-num">21</div></div>
+          <div class="cal-day"><div class="cal-day-num">22</div><div class="cal-event upcoming">HotD S02E03</div></div>
+        </div>
+        <div style="display:flex;gap:16px;padding:8px 16px;border-top:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:6px"><div style="width:8px;height:8px;background:rgba(63,185,80,0.4);border:1px solid var(--green)"></div><span style="font-family:var(--mono);font-size:9px;color:var(--muted)">Aired & grabbed</span></div>
+          <div style="display:flex;align-items:center;gap:6px"><div style="width:8px;height:8px;background:rgba(199,146,234,0.3);border:1px solid var(--sonarr)"></div><span style="font-family:var(--mono);font-size:9px;color:var(--muted)">Upcoming</span></div>
+          <div style="display:flex;align-items:center;gap:6px"><div style="width:8px;height:8px;background:rgba(224,82,82,0.3);border:1px solid var(--red)"></div><span style="font-family:var(--mono);font-size:9px;color:var(--muted)">Missing</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         VIEW: DELUGE
+    ══════════════════════════════════════ -->
+    <div class="view" id="view-deluge">
+      <div class="page-header">
+        <div><div class="page-title"><span class="accent">//</span> Deluge</div><div class="page-subtitle">Torrent client control</div></div>
+        <div class="page-header-actions"><button class="btn btn-primary">+ Add Torrent</button><button class="btn btn-ghost">Pause All</button></div>
+      </div>
+      <div class="stat-grid-2" style="grid-template-columns:repeat(4,1fr)">
+        <div class="status-card ok"><div class="sc-head"><span class="sc-name">Downloading</span><span class="sc-status">Active</span></div><div><div class="sc-value" id="dl-dl-count">3</div><div class="sc-sub">active transfers</div></div></div>
+        <div class="status-card ok"><div class="sc-head"><span class="sc-name">Seeding</span><span class="sc-status">Active</span></div><div><div class="sc-value" id="dl-seed-count">8</div><div class="sc-sub">sharing</div></div></div>
+        <div class="status-card ok"><div class="sc-head"><span class="sc-name">↓ Speed</span><span class="sc-status">Live</span></div><div><div class="sc-value" id="dl-dl-speed">4.2 MB/s</div><div class="sc-sub">download</div></div></div>
+        <div class="status-card ok"><div class="sc-head"><span class="sc-name">↑ Speed</span><span class="sc-status">Live</span></div><div><div class="sc-value" id="dl-ul-speed">0.8 MB/s</div><div class="sc-sub">upload</div></div></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head">
+          <span class="panel-title">All Torrents</span>
+          <div style="display:flex;gap:8px">
+            <button class="panel-tab active">All (13)</button>
+            <button class="panel-tab">Downloading (3)</button>
+            <button class="panel-tab">Seeding (8)</button>
+            <button class="panel-tab">Paused (2)</button>
+          </div>
+        </div>
+        <table class="data-table">
+          <thead><tr><th style="width:32%">Name</th><th>Size</th><th>Progress</th><th>↓ Speed</th><th>↑ Speed</th><th>Ratio</th><th>ETA</th><th>State</th><th>Actions</th></tr></thead>
+          <tbody>
+            <tr>
+              <td style="max-width:180px">Dune Part Two (2024) 2160p</td>
+              <td><span class="pill movie">Movie</span></td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">58.2 GB</td>
+              <td><div style="display:flex;align-items:center;gap:6px"><div class="progress-wrap"><div class="progress-fill" style="width:82%"></div></div><span style="font-family:var(--mono);font-size:9px;color:var(--muted)">82%</span></div></td>
+              <td style="color:var(--teal);font-family:var(--mono);font-size:10px">3.1 MB/s</td>
+              <td style="color:var(--muted);font-family:var(--mono);font-size:10px">0.2 MB/s</td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">—</td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">4m</td>
+              <td><span class="pill dl">DL</span></td>
+              <td><div class="torrent-actions"><button class="icon-btn">⏸</button><button class="icon-btn danger">✕</button></div></td>
+            </tr>
+            <tr>
+              <td style="max-width:180px">Fallout S01E05 1080p</td>
+              <td><span class="pill series">Series</span></td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">4.8 GB</td>
+              <td><div style="display:flex;align-items:center;gap:6px"><div class="progress-wrap"><div class="progress-fill" style="width:47%"></div></div><span style="font-family:var(--mono);font-size:9px;color:var(--muted)">47%</span></div></td>
+              <td style="color:var(--teal);font-family:var(--mono);font-size:10px">1.1 MB/s</td>
+              <td style="color:var(--muted);font-family:var(--mono);font-size:10px">0.1 MB/s</td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">—</td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">12m</td>
+              <td><span class="pill dl">DL</span></td>
+              <td><div class="torrent-actions"><button class="icon-btn">⏸</button><button class="icon-btn danger">✕</button></div></td>
+            </tr>
+            <tr>
+              <td style="max-width:180px">Civil War (2024) 1080p</td>
+              <td><span class="pill movie">Movie</span></td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">12.1 GB</td>
+              <td><div style="display:flex;align-items:center;gap:6px"><div class="progress-wrap"><div class="progress-fill slow" style="width:23%"></div></div><span style="font-family:var(--mono);font-size:9px;color:var(--amber)">23%</span></div></td>
+              <td style="color:var(--amber);font-family:var(--mono);font-size:10px">0.2 MB/s</td>
+              <td style="color:var(--muted);font-family:var(--mono);font-size:10px">0.0 MB/s</td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">—</td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--amber)">1h 14m</td>
+              <td><span class="pill dl">DL</span></td>
+              <td><div class="torrent-actions"><button class="icon-btn">⏸</button><button class="icon-btn danger">✕</button></div></td>
+            </tr>
+            <tr>
+              <td style="max-width:180px">The Boys S04E07 1080p</td>
+              <td><span class="pill series">Series</span></td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">8.3 GB</td>
+              <td><div style="display:flex;align-items:center;gap:6px"><div class="progress-wrap"><div class="progress-fill" style="width:100%"></div></div><span style="font-family:var(--mono);font-size:9px;color:var(--green)">100%</span></div></td>
+              <td style="color:var(--muted);font-family:var(--mono);font-size:10px">—</td>
+              <td style="color:var(--green);font-family:var(--mono);font-size:10px">0.4 MB/s</td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--green)">1.8</td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">∞</td>
+              <td><span class="pill seed">Seed</span></td>
+              <td><div class="torrent-actions"><button class="icon-btn">⏸</button><button class="icon-btn danger">✕</button></div></td>
+            </tr>
+            <tr>
+              <td style="max-width:180px">Alien Romulus (2024) 1080p</td>
+              <td><span class="pill movie">Movie</span></td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">15.6 GB</td>
+              <td><div style="display:flex;align-items:center;gap:6px"><div class="progress-wrap"><div class="progress-fill" style="width:100%"></div></div><span style="font-family:var(--mono);font-size:9px;color:var(--green)">100%</span></div></td>
+              <td style="color:var(--muted);font-family:var(--mono);font-size:10px">—</td>
+              <td style="color:var(--green);font-family:var(--mono);font-size:10px">0.2 MB/s</td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--green)">2.1</td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">∞</td>
+              <td><span class="pill seed">Seed</span></td>
+              <td><div class="torrent-actions"><button class="icon-btn">⏸</button><button class="icon-btn danger">✕</button></div></td>
+            </tr>
+            <tr>
+              <td style="max-width:180px">Shogun S01E01-E10 1080p</td>
+              <td><span class="pill series">Series</span></td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">42.0 GB</td>
+              <td><div style="display:flex;align-items:center;gap:6px"><div class="progress-wrap"><div class="progress-fill" style="width:0%"></div></div><span style="font-family:var(--mono);font-size:9px;color:var(--muted)">0%</span></div></td>
+              <td style="color:var(--muted);font-family:var(--mono);font-size:10px">—</td>
+              <td style="color:var(--muted);font-family:var(--mono);font-size:10px">—</td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">—</td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">—</td>
+              <td><span class="pill pause">Paused</span></td>
+              <td><div class="torrent-actions"><button class="icon-btn">▶</button><button class="icon-btn danger">✕</button></div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         VIEW: PROWLARR
+    ══════════════════════════════════════ -->
+    <div class="view" id="view-prowlarr">
+      <div class="page-header">
+        <div><div class="page-title"><span class="accent">//</span> Prowlarr</div><div class="page-subtitle">Indexer management & search health</div></div>
+        <div class="page-header-actions"><button class="btn btn-primary">+ Add Indexer</button><button class="btn btn-ghost">Test All</button></div>
+      </div>
+      <div class="stat-grid-3">
+        <div class="status-card ok"><div class="sc-head"><span class="sc-name">Indexers</span><span class="sc-status">Online</span></div><div><div class="sc-value" id="pr-indexer-count">7/8</div><div class="sc-sub">healthy indexers</div></div></div>
+        <div class="status-card ok"><div class="sc-head"><span class="sc-name">Grabs Today</span><span class="sc-status">Active</span></div><div><div class="sc-value" id="pr-grabs-count">24</div><div class="sc-sub">successful grabs</div></div></div>
+        <div class="status-card warn"><div class="sc-head"><span class="sc-name">Failures</span><span class="sc-status">Warning</span></div><div><div class="sc-value" id="pr-fail-count">1</div><div class="sc-sub">indexer timeout</div></div></div>
+      </div>
+      <div class="two-col">
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Indexer Status</span></div>
+          <table class="data-table">
+            <thead><tr><th style="width:5%"></th><th style="width:35%">Indexer</th><th>Type</th><th>Grabs</th><th>Avg Response</th><th>Status</th></tr></thead>
+            <tbody id="pr-indexer-body">
+              <tr><td><div class="idx-indicator ok" style="margin:0 auto"></div></td><td>1337x</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">Public</td><td style="font-family:var(--mono);font-size:10px">142</td><td style="font-family:var(--mono);font-size:10px;color:var(--green)">284ms</td><td><span class="pill avail">Online</span></td></tr>
+              <tr><td><div class="idx-indicator ok" style="margin:0 auto"></div></td><td>RARBG Mirror</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">Public</td><td style="font-family:var(--mono);font-size:10px">89</td><td style="font-family:var(--mono);font-size:10px;color:var(--green)">412ms</td><td><span class="pill avail">Online</span></td></tr>
+              <tr><td><div class="idx-indicator ok" style="margin:0 auto"></div></td><td>YTS</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">Public</td><td style="font-family:var(--mono);font-size:10px">74</td><td style="font-family:var(--mono);font-size:10px;color:var(--green)">198ms</td><td><span class="pill avail">Online</span></td></tr>
+              <tr><td><div class="idx-indicator ok" style="margin:0 auto"></div></td><td>EZTV</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">Public</td><td style="font-family:var(--mono);font-size:10px">51</td><td style="font-family:var(--mono);font-size:10px;color:var(--green)">321ms</td><td><span class="pill avail">Online</span></td></tr>
+              <tr><td><div class="idx-indicator ok" style="margin:0 auto"></div></td><td>Nyaa.si</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">Public</td><td style="font-family:var(--mono);font-size:10px">38</td><td style="font-family:var(--mono);font-size:10px;color:var(--green)">556ms</td><td><span class="pill avail">Online</span></td></tr>
+              <tr><td><div class="idx-indicator ok" style="margin:0 auto"></div></td><td>TorrentGalaxy</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">Public</td><td style="font-family:var(--mono);font-size:10px">27</td><td style="font-family:var(--mono);font-size:10px;color:var(--green)">440ms</td><td><span class="pill avail">Online</span></td></tr>
+              <tr><td><div class="idx-indicator ok" style="margin:0 auto"></div></td><td>LimeTorrents</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">Public</td><td style="font-family:var(--mono);font-size:10px">19</td><td style="font-family:var(--mono);font-size:10px;color:var(--amber)">892ms</td><td><span class="pill avail">Online</span></td></tr>
+              <tr style="background:rgba(240,165,0,0.04)"><td><div class="idx-indicator warn" style="margin:0 auto"></div></td><td style="color:var(--amber)">TPB Mirror</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">Public</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">—</td><td style="font-family:var(--mono);font-size:10px;color:var(--red)">Timeout</td><td><span class="pill pend">Degraded</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">Grabs by Indexer (30 days)</span></div>
+          <div class="bar-chart" id="pr-bar-chart">
+            <div class="bar-row"><div class="bar-label">1337x</div><div class="bar-track"><div class="bar-fill" style="width:100%"></div></div><div class="bar-val">142</div></div>
+            <div class="bar-row"><div class="bar-label">RARBG Mirror</div><div class="bar-track"><div class="bar-fill" style="width:63%"></div></div><div class="bar-val">89</div></div>
+            <div class="bar-row"><div class="bar-label">YTS</div><div class="bar-track"><div class="bar-fill" style="width:52%"></div></div><div class="bar-val">74</div></div>
+            <div class="bar-row"><div class="bar-label">EZTV</div><div class="bar-track"><div class="bar-fill" style="width:36%"></div></div><div class="bar-val">51</div></div>
+            <div class="bar-row"><div class="bar-label">Nyaa.si</div><div class="bar-track"><div class="bar-fill" style="width:27%"></div></div><div class="bar-val">38</div></div>
+            <div class="bar-row"><div class="bar-label">TorrentGalaxy</div><div class="bar-track"><div class="bar-fill" style="width:19%"></div></div><div class="bar-val">27</div></div>
+            <div class="bar-row"><div class="bar-label">LimeTorrents</div><div class="bar-track"><div class="bar-fill" style="width:13%"></div></div><div class="bar-val">19</div></div>
+            <div class="bar-row"><div class="bar-label" style="color:var(--amber)">TPB Mirror</div><div class="bar-track"><div class="bar-fill" style="width:0%;background:var(--amber)"></div></div><div class="bar-val" style="color:var(--amber)">0</div></div>
+          </div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><span class="panel-title">Recent Grab History</span></div>
+        <table class="data-table">
+          <thead><tr><th style="width:35%">Title</th><th>Indexer</th><th>Size</th><th>App</th><th>Time</th><th>Result</th></tr></thead>
+          <tbody id="pr-history-body">
+            <tr><td>Dune Part Two 2160p HDR</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">1337x</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">58.2 GB</td><td style="color:var(--radarr);font-family:var(--mono);font-size:10px">RADARR</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">2h ago</td><td><span class="pill avail">Grabbed</span></td></tr>
+            <tr><td>Fallout S01E05 1080p</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">EZTV</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">4.8 GB</td><td style="color:var(--sonarr);font-family:var(--mono);font-size:10px">SONARR</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">3h ago</td><td><span class="pill avail">Grabbed</span></td></tr>
+            <tr><td>The Boys S04E07 1080p</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">1337x</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">8.3 GB</td><td style="color:var(--sonarr);font-family:var(--mono);font-size:10px">SONARR</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">6h ago</td><td><span class="pill avail">Grabbed</span></td></tr>
+            <tr><td>Oppenheimer 2160p</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">TPB Mirror</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">—</td><td style="color:var(--radarr);font-family:var(--mono);font-size:10px">RADARR</td><td style="font-family:var(--mono);font-size:10px;color:var(--muted)">8h ago</td><td><span class="pill miss">Failed</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════
+         VIEW: SETTINGS
+    ══════════════════════════════════════ -->
+    <div class="view" id="view-settings">
+      <div class="page-header">
+        <div><div class="page-title"><span class="accent">//</span> Settings</div><div class="page-subtitle">Configure your service connections</div></div>
+        <div class="page-header-actions"><button class="btn btn-primary">Save All</button></div>
+      </div>
+      <div class="settings-grid">
+        <div class="setting-group">
+          <div class="setting-group-title">Overseerr</div>
+          <div class="setting-row"><div class="setting-label">Host URL</div><input class="setting-input" type="text" value="http://192.168.1.10:5055"></div>
+          <div class="setting-row"><div class="setting-label">API Key</div><input class="setting-input" type="password" value="••••••••••••••••••••••••"></div>
+          <div class="setting-row-inline"><div><div class="setting-label">Enabled</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+        </div>
+        <div class="setting-group">
+          <div class="setting-group-title">Radarr</div>
+          <div class="setting-row"><div class="setting-label">Host URL</div><input class="setting-input" type="text" value="http://192.168.1.11:7878"></div>
+          <div class="setting-row"><div class="setting-label">API Key</div><input class="setting-input" type="password" value="••••••••••••••••••••••••"></div>
+          <div class="setting-row-inline"><div><div class="setting-label">Enabled</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+        </div>
+        <div class="setting-group">
+          <div class="setting-group-title">Sonarr</div>
+          <div class="setting-row"><div class="setting-label">Host URL</div><input class="setting-input" type="text" value="http://192.168.1.12:8989"></div>
+          <div class="setting-row"><div class="setting-label">API Key</div><input class="setting-input" type="password" value="••••••••••••••••••••••••"></div>
+          <div class="setting-row-inline"><div><div class="setting-label">Enabled</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+        </div>
+        <div class="setting-group">
+          <div class="setting-group-title">Prowlarr</div>
+          <div class="setting-row"><div class="setting-label">Host URL</div><input class="setting-input" type="text" value="http://192.168.1.13:9696"></div>
+          <div class="setting-row"><div class="setting-label">API Key</div><input class="setting-input" type="password" value="••••••••••••••••••••••••"></div>
+          <div class="setting-row-inline"><div><div class="setting-label">Enabled</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+        </div>
+        <div class="setting-group">
+          <div class="setting-group-title">Deluge</div>
+          <div class="setting-row"><div class="setting-label">Host URL</div><input class="setting-input" type="text" value="http://192.168.1.14:8112"></div>
+          <div class="setting-row"><div class="setting-label">Password</div><input class="setting-input" type="password" value="••••••••"></div>
+          <div class="setting-row-inline"><div><div class="setting-label">Enabled</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+        </div>
+        <div class="setting-group">
+          <div class="setting-group-title">Dashboard</div>
+          <div class="setting-row"><div class="setting-label">Refresh Interval</div><input class="setting-input" type="text" value="30s"></div>
+          <div class="setting-row-inline"><div><div class="setting-label">Auto-approve same-user requests</div></div><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row-inline"><div><div class="setting-label">Show pulse sparkline</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+          <div class="setting-row-inline"><div><div class="setting-label">Notifications on download complete</div></div><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- FOOTER -->
+<div id="footer">
+  <div class="footer-item"><div class="dot ok" id="ft-overseerr"></div>Overseerr</div>
+  <div class="footer-item"><div class="dot ok" id="ft-radarr"></div>Radarr</div>
+  <div class="footer-item"><div class="dot ok" id="ft-sonarr"></div>Sonarr</div>
+  <div class="footer-item"><div class="dot warn" id="ft-prowlarr"></div>Prowlarr</div>
+  <div class="footer-item"><div class="dot ok" id="ft-deluge"></div>Deluge</div>
+  <div class="footer-spacer"></div>
+  <div class="footer-time" id="clock">—</div>
+</div>
+
+<script>
+  // CLOCK
+  function updateClock() {
+    const now = new Date();
+    document.getElementById('clock').textContent =
+      now.toLocaleTimeString('en-US', { hour12:false, hour:'2-digit', minute:'2-digit', second:'2-digit' });
+  }
+  setInterval(updateClock, 1000);
+  updateClock();
+
+  // PULSE SPARKLINE
+  const canvas = document.getElementById('pulse-canvas');
+  const ctx = canvas.getContext('2d');
+  let points = [];
+  const N = 120;
+
+  function nextPt() {
+    const last = points.length ? points[points.length-1] : 0.5;
+    return Math.max(0.05, Math.min(0.95, last + (Math.random()-0.48)*0.12));
+  }
+  for (let i=0;i<N;i++) points.push(nextPt());
+
+  function drawPulse() {
+    const W = canvas.offsetWidth, H = canvas.offsetHeight;
+    canvas.width = W; canvas.height = H;
+    if (!W||!H) return;
+    ctx.clearRect(0,0,W,H);
+    const grad = ctx.createLinearGradient(0,0,0,H);
+    grad.addColorStop(0,'rgba(0,212,170,0.18)');
+    grad.addColorStop(1,'rgba(0,212,170,0)');
+    ctx.beginPath();
+    ctx.moveTo(0,H);
+    points.forEach((v,i) => { const x=(i/(N-1))*W, y=H-v*(H*0.8)-H*0.1; ctx.lineTo(x,y); });
+    ctx.lineTo(W,H);
+    ctx.closePath();
+    ctx.fillStyle = grad;
+    ctx.fill();
+    ctx.beginPath();
+    points.forEach((v,i) => { const x=(i/(N-1))*W, y=H-v*(H*0.8)-H*0.1; i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+    ctx.strokeStyle='rgba(0,212,170,0.7)';
+    ctx.lineWidth=1.5;
+    ctx.stroke();
+  }
+
+  let frame=0;
+  function animate() {
+    frame++;
+    if (frame%8===0) {
+      points.shift(); points.push(nextPt());
+      const spd = (1+points[points.length-1]*6).toFixed(1);
+      document.getElementById('dl-speed').textContent = spd+' MB/s';
+      const el = document.getElementById('deluge-dl');
+      if (el) el.textContent = spd;
+    }
+    drawPulse();
+    requestAnimationFrame(animate);
+  }
+  animate();
+  window.addEventListener('resize', drawPulse);
+</script>
+<script src="app.js"></script>
+</body>
+</html>
