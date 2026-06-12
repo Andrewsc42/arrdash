@@ -4,6 +4,15 @@ A unified self-hosted dashboard for your Plex/arr stack.
 Overseerr · Radarr · Sonarr · Prowlarr · Deluge — all in one place.
 
 ---
+## Screenshots
+
+![Overview](screenshots/overview.png)
+![Radarr](screenshots/radarr.png)
+![Sonarr](screenshots/sonarr.png)
+![Deluge](screenshots/deluge.png)
+![Overseerr](screenshots/overseerr.png)
+![Prowlarr](screenshots/prowlarr.png)
+![Settings](screenshots/settings.png)
 
 ## Features
 
