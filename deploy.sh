@@ -8,7 +8,7 @@
 set -e
 
 # ── CONFIG ───────────────────────────────────────────────────
-GITHUB_REPO="https://github.com/YOURUSERNAME/arrdash.git"  # ← change this
+GITHUB_REPO="https://github.com/Andrewsc42/arrdash.git"  # ← change this
 
 CT_ID=""                    # Leave blank to auto-select next available ID
 CT_HOSTNAME="arrdash"
