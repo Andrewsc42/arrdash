@@ -472,7 +472,7 @@
       </div>
       <div class="two-col">
         <div class="panel">
-          <div class="panel-head"><span class="panel-title">Download Queue</span><button class="panel-action">Search All Missing</button></div>
+          <div class="panel-head"><span class="panel-title">Download Queue</span><button class="panel-action" id="rd-search-missing-btn">Search All Missing</button></div>
           <table class="data-table">
             <thead><tr><th style="width:40%">Movie</th><th>Quality</th><th>Size</th><th>Progress</th><th>Status</th></tr></thead>
             <tbody id="rd-queue-body">
@@ -590,7 +590,7 @@
     <div class="view" id="view-deluge">
       <div class="page-header">
         <div><div class="page-title"><span class="accent">//</span> Deluge</div><div class="page-subtitle">Torrent client control</div></div>
-        <div class="page-header-actions"><button class="btn btn-primary">+ Add Torrent</button><button class="btn btn-ghost">Pause All</button></div>
+        <div class="page-header-actions"><button class="btn btn-primary" id="dl-add-btn">+ Add Torrent</button><button class="btn btn-ghost" id="dl-pause-all-btn">Pause All</button></div>
       </div>
       <div class="stat-grid-2" style="grid-template-columns:repeat(4,1fr)">
         <div class="status-card ok"><div class="sc-head"><span class="sc-name">Downloading</span><span class="sc-status">Active</span></div><div><div class="sc-value" id="dl-dl-count">3</div><div class="sc-sub">active transfers</div></div></div>
@@ -694,7 +694,7 @@
     <div class="view" id="view-prowlarr">
       <div class="page-header">
         <div><div class="page-title"><span class="accent">//</span> Prowlarr</div><div class="page-subtitle">Indexer management & search health</div></div>
-        <div class="page-header-actions"><button class="btn btn-primary">+ Add Indexer</button><button class="btn btn-ghost">Test All</button></div>
+        <div class="page-header-actions"><button class="btn btn-primary">+ Add Indexer</button><button class="btn btn-ghost" id="pr-test-all-btn">Test All</button></div>
       </div>
       <div class="stat-grid-3">
         <div class="status-card ok"><div class="sc-head"><span class="sc-name">Indexers</span><span class="sc-status">Online</span></div><div><div class="sc-value" id="pr-indexer-count">7/8</div><div class="sc-sub">healthy indexers</div></div></div>
