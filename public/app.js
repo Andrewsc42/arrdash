@@ -835,7 +835,6 @@ function setInput(id, value) {
 
 async function saveSettings() {
   const btn = document.getElementById('settings-save-btn');
-  const feedback = document.getElementById('settings-feedback');
 
   btn.textContent = 'Saving…';
   btn.disabled = true;
@@ -857,10 +856,18 @@ async function saveSettings() {
   try {
     const res = await api.post('/settings', body);
     if (res.success) {
-      showFeedback('✓ Settings saved successfully', 'var(--green)');
-      // Hide first-run banner after successful save
-      const banner = document.getElementById('first-run-banner');
-      if (banner) banner.style.display = 'none';
+      if (res.restarting) {
+        // Server is restarting to apply changes — show spinner and poll
+        btn.textContent = 'Restarting…';
+        showFeedback('✓ Settings saved — restarting server...', 'var(--amber)');
+        await pollUntilBack();
+        showFeedback('✓ Server back online — applying live data!', 'var(--green)');
+        const banner = document.getElementById('first-run-banner');
+        if (banner) banner.style.display = 'none';
+        setTimeout(() => switchTab('overview'), 1200);
+      } else {
+        showFeedback('✓ Settings saved', 'var(--green)');
+      }
     } else {
       showFeedback('✗ Failed to save settings', 'var(--red)');
     }
@@ -870,6 +877,20 @@ async function saveSettings() {
     btn.textContent = 'Save All';
     btn.disabled = false;
   }
+}
+
+// Poll /api/auth/status until the server responds again after restart
+async function pollUntilBack(attempts = 30) {
+  for (let i = 0; i < attempts; i++) {
+    await new Promise(r => setTimeout(r, 1000));
+    try {
+      const res = await fetch('/api/auth/status');
+      if (res.ok) return true;
+    } catch {
+      // still restarting, keep polling
+    }
+  }
+  return false;
 }
 
 function showFeedback(msg, color) {
