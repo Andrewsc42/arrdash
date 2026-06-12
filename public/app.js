@@ -779,3 +779,14 @@ document.addEventListener('DOMContentLoaded', () => {
   setupSearch();
   switchTab('overview');
 });
+
+// ── AUTH ─────────────────────────────────────────────────────
+async function logout() {
+  await fetch('/api/auth/logout', { method: 'POST' });
+  window.location.href = '/login';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const logoutBtn = document.getElementById('logout-btn');
+  if (logoutBtn) logoutBtn.addEventListener('click', logout);
+});
