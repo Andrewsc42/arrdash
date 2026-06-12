@@ -5,7 +5,7 @@ Overseerr · Radarr · Sonarr · Prowlarr · Deluge — all in one place.
 
 ---
 ## Screenshots
-
+![Login](screenshots/login.png)
 ![Overview](screenshots/overview.png)
 ![Radarr](screenshots/radarr.png)
 ![Sonarr](screenshots/sonarr.png)
