@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const router = express.Router();
 
-const ENV_PATH = path.join(__dirname, '../../.env');
+const ENV_PATH = path.resolve(__dirname, '../../.env');
 
 // Parse .env file into object
 function parseEnv(content) {
@@ -20,18 +20,17 @@ function parseEnv(content) {
   return result;
 }
 
-// Write object back to .env preserving comments
+// Write updates into .env preserving comments
 function writeEnv(updates) {
   let content = '';
   try {
     content = fs.readFileSync(ENV_PATH, 'utf8');
   } catch {
-    content = fs.readFileSync(path.join(__dirname, '../../.env.example'), 'utf8');
+    content = fs.readFileSync(path.resolve(__dirname, '../../.env.example'), 'utf8');
   }
 
-  // For each key in updates, replace or append
   Object.entries(updates).forEach(([key, val]) => {
-    const regex = new RegExp(`^(${key}=).*$`, 'm');
+    const regex = new RegExp(`^${key}=.*$`, 'm');
     if (regex.test(content)) {
       content = content.replace(regex, `${key}=${val}`);
     } else {
@@ -41,28 +40,27 @@ function writeEnv(updates) {
 
   fs.writeFileSync(ENV_PATH, content, 'utf8');
 
-  // Apply to current process env so changes take effect without restart
+  // Also apply to current process so routes work immediately before restart
   Object.entries(updates).forEach(([key, val]) => {
     process.env[key] = val;
   });
 }
 
-// GET /api/settings  — return current settings (never return secrets in full)
+// GET /api/settings
 router.get('/', (req, res) => {
   try {
     const content = fs.existsSync(ENV_PATH)
       ? fs.readFileSync(ENV_PATH, 'utf8')
-      : fs.readFileSync(path.join(__dirname, '../../.env.example'), 'utf8');
+      : fs.readFileSync(path.resolve(__dirname, '../../.env.example'), 'utf8');
 
     const env = parseEnv(content);
 
-    // Return URLs and mask secrets partially
     const mask = (val) => val && val.length > 6
       ? val.substring(0, 4) + '••••••••'
       : (val ? '••••••••' : '');
 
     res.json({
-      isFirstRun: !env.OVERSEERR_URL || env.OVERSEERR_URL.includes('192.168.1'),
+      isFirstRun: !env.OVERSEERR_API_KEY || env.OVERSEERR_API_KEY.includes('your_'),
       overseerr: {
         url: env.OVERSEERR_URL || '',
         apiKey: env.OVERSEERR_API_KEY ? mask(env.OVERSEERR_API_KEY) : '',
@@ -94,7 +92,7 @@ router.get('/', (req, res) => {
   }
 });
 
-// POST /api/settings  — save settings to .env
+// POST /api/settings
 router.post('/', (req, res) => {
   try {
     const {
@@ -108,26 +106,39 @@ router.post('/', (req, res) => {
 
     const updates = {};
 
-    if (overseerrUrl)   updates.OVERSEERR_URL     = overseerrUrl;
-    if (overseerrApiKey && !overseerrApiKey.includes('••')) updates.OVERSEERR_API_KEY = overseerrApiKey;
-    if (radarrUrl)      updates.RADARR_URL         = radarrUrl;
-    if (radarrApiKey && !radarrApiKey.includes('••'))       updates.RADARR_API_KEY    = radarrApiKey;
-    if (sonarrUrl)      updates.SONARR_URL         = sonarrUrl;
-    if (sonarrApiKey && !sonarrApiKey.includes('••'))       updates.SONARR_API_KEY    = sonarrApiKey;
-    if (prowlarrUrl)    updates.PROWLARR_URL       = prowlarrUrl;
-    if (prowlarrApiKey && !prowlarrApiKey.includes('••'))   updates.PROWLARR_API_KEY  = prowlarrApiKey;
-    if (delugeUrl)      updates.DELUGE_URL         = delugeUrl;
-    if (delugePassword && !delugePassword.includes('••'))   updates.DELUGE_PASSWORD   = delugePassword;
-    if (port)           updates.PORT               = port;
+    if (overseerrUrl)                                          updates.OVERSEERR_URL     = overseerrUrl;
+    if (overseerrApiKey && !overseerrApiKey.includes('••'))   updates.OVERSEERR_API_KEY = overseerrApiKey;
+    if (radarrUrl)                                             updates.RADARR_URL        = radarrUrl;
+    if (radarrApiKey && !radarrApiKey.includes('••'))         updates.RADARR_API_KEY    = radarrApiKey;
+    if (sonarrUrl)                                             updates.SONARR_URL        = sonarrUrl;
+    if (sonarrApiKey && !sonarrApiKey.includes('••'))         updates.SONARR_API_KEY    = sonarrApiKey;
+    if (prowlarrUrl)                                           updates.PROWLARR_URL      = prowlarrUrl;
+    if (prowlarrApiKey && !prowlarrApiKey.includes('••'))     updates.PROWLARR_API_KEY  = prowlarrApiKey;
+    if (delugeUrl)                                             updates.DELUGE_URL        = delugeUrl;
+    if (delugePassword && !delugePassword.includes('••'))     updates.DELUGE_PASSWORD   = delugePassword;
+    if (port)                                                  updates.PORT              = port;
+
+    if (Object.keys(updates).length === 0) {
+      return res.json({ success: true, restarting: false });
+    }
 
     writeEnv(updates);
-    res.json({ success: true });
+
+    // Send response before restarting so the client gets confirmation
+    res.json({ success: true, restarting: true });
+
+    // Graceful restart after short delay — systemd will bring it back up
+    setTimeout(() => {
+      console.log('[arrdash] Settings updated — restarting to apply changes...');
+      process.exit(0);
+    }, 500);
+
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// GET /api/settings/firstrun  — check if setup is needed
+// GET /api/settings/firstrun
 router.get('/firstrun', (req, res) => {
   try {
     if (!fs.existsSync(ENV_PATH)) {
