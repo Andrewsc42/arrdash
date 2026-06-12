@@ -777,7 +777,16 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   setupSearch();
-  switchTab('overview');
+
+  // Check if this is first run (no API keys configured)
+  // If so, redirect to settings tab automatically
+  checkFirstRun().then(() => {
+    // Only load overview if we didn't redirect to settings
+    const active = document.querySelector('.view.active');
+    if (active && active.id !== 'view-settings') {
+      switchTab('overview');
+    }
+  });
 });
 
 // ── AUTH ─────────────────────────────────────────────────────
@@ -790,3 +799,112 @@ document.addEventListener('DOMContentLoaded', () => {
   const logoutBtn = document.getElementById('logout-btn');
   if (logoutBtn) logoutBtn.addEventListener('click', logout);
 });
+
+// ── SETTINGS ─────────────────────────────────────────────────
+async function loadSettings() {
+  try {
+    const data = await api.get('/settings');
+
+    // First-run banner
+    const banner = document.getElementById('first-run-banner');
+    if (banner) {
+      banner.style.display = data.firstRun ? 'flex' : 'none';
+    }
+
+    // Populate fields — URLs always shown, keys show masked value if set
+    setInput('cfg-overseerr-url', data.overseerr?.url);
+    setInput('cfg-overseerr-key', data.overseerr?.hasKey ? data.overseerr.apiKey : '');
+    setInput('cfg-radarr-url',    data.radarr?.url);
+    setInput('cfg-radarr-key',    data.radarr?.hasKey ? data.radarr.apiKey : '');
+    setInput('cfg-sonarr-url',    data.sonarr?.url);
+    setInput('cfg-sonarr-key',    data.sonarr?.hasKey ? data.sonarr.apiKey : '');
+    setInput('cfg-prowlarr-url',  data.prowlarr?.url);
+    setInput('cfg-prowlarr-key',  data.prowlarr?.hasKey ? data.prowlarr.apiKey : '');
+    setInput('cfg-deluge-url',    data.deluge?.url);
+    setInput('cfg-deluge-password', data.deluge?.hasPassword ? '••••••••' : '');
+    setInput('cfg-port',          data.port);
+  } catch (e) {
+    console.error('Settings load error', e);
+  }
+}
+
+function setInput(id, value) {
+  const el = document.getElementById(id);
+  if (el && value) el.value = value;
+}
+
+async function saveSettings() {
+  const btn = document.getElementById('settings-save-btn');
+  const feedback = document.getElementById('settings-feedback');
+
+  btn.textContent = 'Saving…';
+  btn.disabled = true;
+
+  const body = {
+    overseerrUrl:    document.getElementById('cfg-overseerr-url')?.value,
+    overseerrApiKey: document.getElementById('cfg-overseerr-key')?.value,
+    radarrUrl:       document.getElementById('cfg-radarr-url')?.value,
+    radarrApiKey:    document.getElementById('cfg-radarr-key')?.value,
+    sonarrUrl:       document.getElementById('cfg-sonarr-url')?.value,
+    sonarrApiKey:    document.getElementById('cfg-sonarr-key')?.value,
+    prowlarrUrl:     document.getElementById('cfg-prowlarr-url')?.value,
+    prowlarrApiKey:  document.getElementById('cfg-prowlarr-key')?.value,
+    delugeUrl:       document.getElementById('cfg-deluge-url')?.value,
+    delugePassword:  document.getElementById('cfg-deluge-password')?.value,
+    port:            document.getElementById('cfg-port')?.value,
+  };
+
+  try {
+    const res = await api.post('/settings', body);
+    if (res.success) {
+      showFeedback('✓ Settings saved successfully', 'var(--green)');
+      // Hide first-run banner after successful save
+      const banner = document.getElementById('first-run-banner');
+      if (banner) banner.style.display = 'none';
+    } else {
+      showFeedback('✗ Failed to save settings', 'var(--red)');
+    }
+  } catch {
+    showFeedback('✗ Error saving settings', 'var(--red)');
+  } finally {
+    btn.textContent = 'Save All';
+    btn.disabled = false;
+  }
+}
+
+function showFeedback(msg, color) {
+  const el = document.getElementById('settings-feedback');
+  if (!el) return;
+  el.textContent = msg;
+  el.style.color = color;
+  el.style.background = color === 'var(--green)'
+    ? 'rgba(63,185,80,0.08)'
+    : 'rgba(224,82,82,0.08)';
+  el.style.border = `1px solid ${color}`;
+  el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 4000);
+}
+
+// ── FIRST RUN CHECK ──────────────────────────────────────────
+async function checkFirstRun() {
+  try {
+    const data = await api.get('/settings/firstrun');
+    if (data.firstRun) {
+      // Redirect to settings tab with banner visible
+      switchTab('settings');
+      const banner = document.getElementById('first-run-banner');
+      if (banner) banner.style.display = 'flex';
+    }
+  } catch (e) {
+    console.error('First run check failed', e);
+  }
+}
+
+// Override DOMContentLoaded to wire settings save and check first run
+document.addEventListener('DOMContentLoaded', () => {
+  const saveBtn = document.getElementById('settings-save-btn');
+  if (saveBtn) saveBtn.addEventListener('click', saveSettings);
+});
+
+// Override settings view loader
+viewLoaders['settings'] = loadSettings;
