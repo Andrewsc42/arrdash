@@ -28,8 +28,11 @@ app.use(requireAuth);
 // ── STATIC FILES ─────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, '../public')));
 
-// ── AUTH ROUTES (unprotected — handled inside requireAuth) ───
-app.use('/api/auth', require('./routes/auth'));
+// ── AUTH ROUTES ───────────────────────────────────────────────
+app.use('/api/auth',     require('./routes/auth'));
+
+// ── SETTINGS ROUTES (protected) ──────────────────────────────
+app.use('/api/settings', require('./routes/settings'));
 
 // ── SERVICE API ROUTES (all protected by requireAuth) ────────
 app.use('/api/overseerr', require('./routes/overseerr'));
@@ -66,7 +69,7 @@ app.get('/login', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/login.html'));
 });
 
-// ── CATCH-ALL: serve the frontend ────────────────────────────
+// ── CATCH-ALL ────────────────────────────────────────────────
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
@@ -79,12 +82,8 @@ app.listen(config.port, () => {
   ╚══════════════════════════════════════╝
   `);
 
-  // Warn if auth isn't configured
   if (!process.env.ARRDASH_PASSWORD_HASH) {
     console.warn('  ⚠️  WARNING: ARRDASH_PASSWORD_HASH is not set in .env');
     console.warn('     ArrDash is running WITHOUT authentication!');
-    console.warn('     Run the following to generate a hash:');
-    console.warn('     node -e "const b=require(\'bcryptjs\'); console.log(b.hashSync(\'yourpassword\', 12))"');
-    console.warn('');
   }
 });
