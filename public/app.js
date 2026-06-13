@@ -134,15 +134,13 @@ async function loadOverview() {
       document.getElementById('ul-speed').textContent = fmt.speed(dlStatus.uploadSpeed);
     }
     if (osStatus.online) {
-      const pulsePending = document.querySelector('.pulse-stat:nth-child(3) .val');
-      if (pulsePending) pulsePending.textContent = osStatus.pendingCount ?? 0;
+      setEl('pulse-requests', osStatus.pendingCount ?? 0);
     }
     if (prStatus.online) {
-      const pulseIdx = document.querySelector('.pulse-stat:nth-child(4) .val');
-      if (pulseIdx) pulseIdx.textContent = `${prStatus.healthyCount ?? '?'}/${prStatus.indexerCount ?? '?'}`;
+      setEl('pulse-indexers', `${prStatus.healthyCount ?? '?'}/${prStatus.indexerCount ?? '?'}`);
     }
 
-    await Promise.all([loadOverviewQueue(), loadOverviewRequests(), loadOverviewDeluge()]);
+    await Promise.all([loadOverviewQueue(), loadOverviewRequests(), loadOverviewDeluge(), loadOverviewIndexers()]);
   } catch (e) {
     console.error('Overview load error', e);
   }
@@ -187,42 +185,68 @@ async function loadOverviewDeluge() {
     const list = Array.isArray(torrents) ? torrents : [];
     const downloading = list.filter(t => t.state?.toLowerCase() === 'downloading');
 
-    // Update speed bar
-    const dlSpeedEl = document.querySelector('#view-overview .speed-row .val:first-of-type');
-    const dlBar = document.querySelector('#view-overview .speed-row .progress-fill:first-of-type');
-    const ulBar = document.querySelectorAll('#view-overview .speed-row .progress-fill')[1];
+    const dlBps = status.downloadSpeed || status.download_payload_rate || 0;
+    const ulBps = status.uploadSpeed   || status.upload_payload_rate   || 0;
 
-    if (status.online && dlBar) {
-      const maxSpeed = 10 * 1024 * 1024;
-      dlBar.style.width = `${Math.min(100, (status.downloadSpeed / maxSpeed) * 100)}%`;
-      if (ulBar) ulBar.style.width = `${Math.min(100, (status.uploadSpeed / maxSpeed) * 100)}%`;
+    // Update speed bar
+    const dlBar = document.getElementById('ov-dl-bar');
+    const ulBar = document.getElementById('ov-ul-bar');
+    const dlVal = document.getElementById('ov-dl-speed');
+    const ulVal = document.getElementById('ov-ul-speed');
+
+    if (status.online) {
+      const maxSpeed = 20 * 1024 * 1024;
+      if (dlBar) dlBar.style.width = `${Math.min(100, (dlBps / maxSpeed) * 100)}%`;
+      if (ulBar) ulBar.style.width = `${Math.min(100, (ulBps / maxSpeed) * 100)}%`;
+      if (dlVal) dlVal.textContent = fmt.speed(dlBps);
+      if (ulVal) ulVal.textContent = fmt.speed(ulBps);
     }
 
     // Torrent table
-    const tbody = document.getElementById('ov-queue-body');
+    const tbody = document.getElementById('ov-deluge-body');
     if (!tbody) return;
 
     if (!status.online) {
-      tbody.innerHTML = emptyRow(6, 'Deluge offline');
+      tbody.innerHTML = emptyRow(5, 'Deluge offline');
       return;
     }
 
     tbody.innerHTML = downloading.length
       ? downloading.slice(0, 5).map(t => {
           const pct = t.progress ?? 0;
+          const spd = t.downloadSpeed || t.download_payload_rate || 0;
           return `<tr>
-            <td style="max-width:140px">${t.name}</td>
-            <td><span class="pill movie">—</span></td>
+            <td style="max-width:160px">${t.name}</td>
             <td>${progressBar(pct, pct < 30 ? 'slow' : '')}</td>
-            <td style="color:var(--teal);font-family:var(--mono);font-size:10px">${fmt.speed(t.downloadSpeed)}</td>
+            <td style="color:var(--teal);font-family:var(--mono);font-size:10px">${fmt.speed(spd)}</td>
             <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">${fmt.eta(t.eta)}</td>
             <td>${torrentStatePill(t.state)}</td>
           </tr>`;
         }).join('')
-      : emptyRow(6, 'No active downloads');
+      : emptyRow(5, 'No active downloads');
   } catch (e) {
     console.error('Overview deluge error', e);
   }
+}
+
+
+async function loadOverviewIndexers() {
+  try {
+    const indexers = await api.get('/prowlarr/indexers').catch(() => []);
+    const el = document.getElementById('ov-indexer-list');
+    if (!el) return;
+    const enabled = (indexers || []).filter(i => i.enable);
+    el.innerHTML = enabled.length
+      ? enabled.slice(0, 8).map(idx => {
+          const degraded = idx.status?.disabled;
+          return `<div class="indexer-item">
+            <div class="idx-indicator ${degraded ? 'warn' : 'ok'}"></div>
+            <div class="idx-name" style="${degraded ? 'color:var(--amber)' : ''}">${idx.name}</div>
+            <div class="idx-stat" style="${degraded ? 'color:var(--amber)' : ''}">${degraded ? 'Timeout' : 'Online'}</div>
+          </div>`;
+        }).join('')
+      : '<div style="padding:20px 16px;font-family:var(--mono);font-size:10px;color:var(--muted)">No indexers configured</div>';
+  } catch (e) { console.error('Overview indexers error', e); }
 }
 
 async function loadOverviewQueue() {
@@ -576,12 +600,17 @@ async function loadDeluge() {
 
     setEl('dl-dl-count',   dling.length);
     setEl('dl-seed-count', seeding.length);
-    setEl('dl-dl-speed',   fmt.speed(status.downloadSpeed));
-    setEl('dl-ul-speed',   fmt.speed(status.uploadSpeed));
+
+    // Handle both camelCase and snake_case from Deluge API
+    const dlSpeed = status.downloadSpeed || status.download_payload_rate || 0;
+    const ulSpeed = status.uploadSpeed   || status.upload_payload_rate   || 0;
+
+    setEl('dl-dl-speed', fmt.speed(dlSpeed));
+    setEl('dl-ul-speed', fmt.speed(ulSpeed));
 
     if (status.online) {
-      document.getElementById('dl-speed').textContent = fmt.speed(status.downloadSpeed);
-      document.getElementById('ul-speed').textContent = fmt.speed(status.uploadSpeed);
+      document.getElementById('dl-speed').textContent = fmt.speed(dlSpeed);
+      document.getElementById('ul-speed').textContent = fmt.speed(ulSpeed);
     }
 
     const tbody = document.getElementById('dl-torrent-body');
@@ -590,19 +619,18 @@ async function loadDeluge() {
     tbody.innerHTML = list.length
       ? list.map(t => {
           const isPaused = t.state?.toLowerCase() === 'paused';
-          const pct = t.progress ?? 0;
-          const pctCls = pct < 30 && !isPaused ? 'slow' : '';
+          const pctCls = torrentPct < 30 && !isPaused ? 'slow' : '';
           return `<tr data-hash="${t.hash}">
             <td style="max-width:200px">${t.name}</td>
             <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">${fmt.bytes(t.size)}</td>
             <td>
               <div style="display:flex;align-items:center;gap:6px">
-                ${progressBar(pct, pctCls)}
-                <span style="font-family:var(--mono);font-size:9px;color:var(--muted)">${fmt.pct(pct)}</span>
+                ${progressBar(torrentPct, pctCls)}
+                <span style="font-family:var(--mono);font-size:9px;color:var(--muted)">${fmt.pct(torrentPct)}</span>
               </div>
             </td>
-            <td style="font-family:var(--mono);font-size:10px;color:var(--teal)">${fmt.speed(t.downloadSpeed)}</td>
-            <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">${fmt.speed(t.uploadSpeed)}</td>
+            <td style="font-family:var(--mono);font-size:10px;color:var(--teal)">${fmt.speed(dlSpd)}</td>
+            <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">${fmt.speed(ulSpd)}</td>
             <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">${t.ratio?.toFixed(2) ?? '—'}</td>
             <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">${fmt.eta(t.eta)}</td>
             <td>${torrentStatePill(t.state)}</td>
@@ -733,6 +761,14 @@ async function loadProwlarr() {
     setEl('pr-grabs-count',   grabsToday);
     setEl('pr-fail-count',    failures);
 
+    // Fix failures card color - only warn if there are actual failures
+    const failCard = document.getElementById('pr-fail-card');
+    if (failCard) {
+      failCard.className = failCard.className.replace(/(ok|warn|error)/, failures > 0 ? 'warn' : 'ok');
+      const failStatus = failCard.querySelector('.sc-status');
+      if (failStatus) failStatus.textContent = failures > 0 ? 'Warning' : 'All Good';
+    }
+
     // Indexer table
     const iBody = document.getElementById('pr-indexer-body');
     if (iBody) {
@@ -780,10 +816,14 @@ async function loadProwlarr() {
       hBody.innerHTML = recs.length
         ? recs.map(h => {
             const failed = h.eventType === 'indexerError' || h.successful === false;
+            // Prowlarr history uses different field names depending on version
+            const title   = h.title       || h.sourceTitle || h.query || '—';
+            const indexer = h.indexer     || h.indexerName || '—';
+            const size    = h.size        || h.downloadVolumeFactor || 0;
             return `<tr>
-              <td style="max-width:240px">${h.title || '—'}</td>
-              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">${h.indexer || '—'}</td>
-              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">${fmt.bytes(h.size)}</td>
+              <td style="max-width:240px">${title}</td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">${indexer}</td>
+              <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">${size ? fmt.bytes(size) : '—'}</td>
               <td style="font-family:var(--mono);font-size:10px;color:var(--muted)">${fmt.ago(h.date)}</td>
               <td>${failed ? pill('Failed','miss') : pill('Grabbed','avail')}</td>
             </tr>`;
