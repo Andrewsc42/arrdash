@@ -185,8 +185,9 @@ async function loadOverviewDeluge() {
     const list = Array.isArray(torrents) ? torrents : [];
     const downloading = list.filter(t => t.state?.toLowerCase() === 'downloading');
 
-    const dlBps = status.downloadSpeed || status.download_payload_rate || 0;
-    const ulBps = status.uploadSpeed   || status.upload_payload_rate   || 0;
+    // Calculate real speeds from torrent list (more reliable than status endpoint)
+    const dlBps = list.reduce((sum, t) => sum + (t.downloadSpeed || t.download_payload_rate || 0), 0);
+    const ulBps = list.reduce((sum, t) => sum + (t.uploadSpeed   || t.upload_payload_rate   || 0), 0);
 
     // Update speed bar
     const dlBar = document.getElementById('ov-dl-bar');
@@ -601,9 +602,9 @@ async function loadDeluge() {
     setEl('dl-dl-count',   dling.length);
     setEl('dl-seed-count', seeding.length);
 
-    // Handle both camelCase and snake_case from Deluge API
-    const dlSpeed = status.downloadSpeed || status.download_payload_rate || 0;
-    const ulSpeed = status.uploadSpeed   || status.upload_payload_rate   || 0;
+    // Calculate real speeds from torrent list (more reliable than status endpoint)
+    const dlSpeed = list.reduce((sum, t) => sum + (t.downloadSpeed || t.download_payload_rate || 0), 0);
+    const ulSpeed = list.reduce((sum, t) => sum + (t.uploadSpeed   || t.upload_payload_rate   || 0), 0);
 
     setEl('dl-dl-speed', fmt.speed(dlSpeed));
     setEl('dl-ul-speed', fmt.speed(ulSpeed));
